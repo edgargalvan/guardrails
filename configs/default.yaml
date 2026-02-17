@@ -1,0 +1,210 @@
+# =============================================================
+# 200dma Strategy — Default Configuration
+# =============================================================
+#
+# This config defines the full 2x2 strategy matrix plus benchmarks.
+# Run all four, or comment out what you don't want.
+#
+# To add your own strategy: copy any block below, change the
+# parameters, give it a unique name. The runner picks it up
+# automatically.
+#
+# To add a benchmark: add a block under benchmarks with tickers
+# and fixed weights. Benchmarks are buy-and-hold, rebalanced
+# quarterly.
+# =============================================================
+
+strategies:
+
+  # ---------------------------------------------------------
+  # Row 1: Equal Weight (33/33/33 among survivors)
+  # ---------------------------------------------------------
+
+  EW-cash:
+    description: "Equal weight, exit to cash. Simplest strategy, best risk-adjusted."
+    universe: [SPY, TLT, GLD]
+    filter:
+      type: sma
+      window: 200            # 200-day simple moving average
+      frequency: monthly     # Evaluate on last trading day of month
+    weights:
+      type: equal
+    exit_mode: cash           # Filtered assets' weight goes to cash
+
+  EW-renorm:
+    description: "Equal weight, renormalize. Higher growth, deeper drawdowns."
+    universe: [SPY, TLT, GLD]
+    filter:
+      type: sma
+      window: 200
+      frequency: monthly
+    weights:
+      type: equal
+    exit_mode: renormalize    # Filtered assets' weight redistributed to survivors
+
+  # ---------------------------------------------------------
+  # Row 2: Momentum-Ranked (70/20/10 among survivors by 12-1)
+  # ---------------------------------------------------------
+
+  Momentum-cash:
+    description: "Momentum tilt, exit to cash. Captures asset class divergence."
+    universe: [SPY, TLT, GLD]
+    filter:
+      type: sma
+      window: 200
+      frequency: monthly
+    weights:
+      type: momentum
+      lookback_days: 252     # 12 months of trading days
+      skip_days: 21          # Exclude most recent month (avoid mean-reversion)
+      split: [0.70, 0.20, 0.10]  # Best / middle / worst survivor
+    exit_mode: cash
+
+  Momentum-renorm:
+    description: "Momentum tilt, renormalize. Maximum growth, largest drawdowns."
+    universe: [SPY, TLT, GLD]
+    filter:
+      type: sma
+      window: 200
+      frequency: monthly
+    weights:
+      type: momentum
+      lookback_days: 252
+      skip_days: 21
+      split: [0.70, 0.20, 0.10]
+    exit_mode: renormalize
+
+  # ---------------------------------------------------------
+  # Additional filtered strategies
+  # ---------------------------------------------------------
+
+  60-40-filtered:
+    description: "Classic 60/40 with 200dma filter. Does the 3-fund universe add value?"
+    universe: [SPY, AGG]
+    filter:
+      type: sma
+      window: 200
+      frequency: monthly
+    weights:
+      type: fixed
+      allocation:
+        SPY: 0.60
+        AGG: 0.40
+    exit_mode: cash
+
+  Faber-5-Asset:
+    description: "Faber's original 5-asset universe with 200dma filter, exit to cash."
+    universe: [SPY, EFA, DBC, VNQ, IEF]
+    filter:
+      type: sma
+      window: 200
+      frequency: monthly
+    weights:
+      type: equal
+    exit_mode: cash
+
+# =============================================================
+# Benchmarks — buy-and-hold portfolios for comparison
+# =============================================================
+
+benchmarks:
+
+  SPY-BH:
+    description: "S&P 500 buy and hold"
+    tickers: [SPY]
+    weights: {SPY: 1.0}
+
+  SPY-TLT-GLD-BH:
+    description: "Equal weight 3-fund buy and hold (no filter). Does the 200dma filter add value?"
+    tickers: [SPY, TLT, GLD]
+    weights: {SPY: 0.3333, TLT: 0.3333, GLD: 0.3334}
+
+  60-40:
+    description: "Classic 60/40 stock/bond"
+    tickers: [SPY, BND]
+    weights: {SPY: 0.60, BND: 0.40}
+
+  Boglehead-3Fund:
+    description: "VTI/VXUS/BND — the r/personalfinance standard"
+    tickers: [VTI, VXUS, BND]
+    weights: {VTI: 0.50, VXUS: 0.20, BND: 0.30}
+
+  All-Weather-Lite:
+    description: "Dalio-inspired risk parity lite"
+    tickers: [SPY, TLT, GLD, TIP]
+    weights: {SPY: 0.30, TLT: 0.40, GLD: 0.15, TIP: 0.15}
+
+# =============================================================
+# Settings
+# =============================================================
+
+settings:
+
+  # Output directory for results, plots, and tearsheets (relative to project root).
+  # Change this per config to avoid overwriting previous runs.
+  # e.g. output_dir: results/experiment_01
+  output_dir: results
+
+  initial_capital: 200000
+
+  # Cash vehicle — what earns yield when strategy is in "cash"
+  # Options: SHY (short-term treasury), BIL, SGOV, or null for 0%
+  cash_vehicle: SHY
+
+  # Transaction costs (Schwab defaults, as of 2025)
+  costs:
+    commission_per_trade: 0.00        # fraction of trade value (0.0 = free, 0.001 = 10bps)
+    slippage_bps: 2                   # ~2bps typical for liquid ETFs
+    # Note: at monthly frequency with 3 liquid ETFs, total annual
+    # cost impact is <0.05%. Modeled for completeness.
+
+  # Multi-window comparison — strategy is evaluated from each start date
+  # through the end of available data
+  windows:
+    - label: "Full Period"
+      start: 2007-07-01               # Includes GFC
+    - label: "Post-GFC"
+      start: 2009-04-01
+    - label: "All Tickers"
+      start: 2011-02-01               # All benchmarks have data
+    - label: "Pre-COVID"
+      start: 2018-01-01
+    - label: "Post-COVID"
+      start: 2021-01-01               # K's known weak period
+
+  # Reference strategy — always included in comparison tables
+  # even if commented out above. This is the bar to beat.
+  reference: EW-cash
+
+  # Benchmark rebalancing frequency
+  # Valid: "quarterly" (Mar/Jun/Sep/Dec), "annual" (Dec), "monthly"
+  benchmark_rebalance: quarterly
+
+  # Metrics to compute (these are the defaults; add custom metrics
+  # in src/metrics.py and reference them here by function name)
+  metrics:
+    - sharpe
+    - sortino
+    - cagr
+    - annual_vol
+    - max_drawdown
+    - calmar
+    - ulcer_index
+    - worst_month
+    - worst_year
+    - upside_capture     # vs SPY
+    - downside_capture   # vs SPY
+
+  # Plots to generate
+  plots:
+    - equity_curves           # All strategies + benchmarks, log scale
+    - drawdowns               # Overlaid drawdown chart
+    - annual_returns          # Grouped bar chart by year
+    - risk_return_scatter     # x=MaxDD, y=CAGR, one dot per portfolio
+    - rolling_12m             # Rolling 12-month return, all overlaid
+
+  # Generate per-strategy quantstats HTML tearsheets
+  # Each strategy/benchmark gets a tearsheet vs tearsheet_benchmark.
+  # The benchmark itself is skipped (no self-comparison).
+  generate_tearsheets: true
+  tearsheet_benchmark: SPY-BH
