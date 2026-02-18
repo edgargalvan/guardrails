@@ -50,11 +50,31 @@ It turns out this is a continuous parameter — `redistribution_pct` — that go
 | 75% | 0.987 | 10.4% | -19.6% |
 | 100% (renorm) | 0.962 | 11.2% | -22.6% |
 
-Sharpe stays within a ~0.08 band across the entire range. CAGR climbs monotonically from 7.9% to 11.2%. Max drawdown worsens monotonically from -13.8% to -22.6%. The same pattern holds for the momentum-tilt variant and across every time window we tested.
+Sharpe stays within a ~0.08 band across the entire range. CAGR climbs monotonically from 7.9% to 11.2%. Max drawdown worsens monotonically from -13.8% to -22.6%. For equal weight, this monotonic pattern holds across every time window we tested. Momentum tells a different story.
 
 This means the cash-vs-renormalize choice isn't an optimization — it's a risk appetite dial. You're choosing how much drawdown you can stomach in exchange for higher compounding. There's no free lunch hidden at any point along the curve. Pick the drawdown you can sleep through, set the parameter, and move on.
 
-The full sweep data (21 data points × 3 configurations) is in `results/redistribution_sweep.csv`.
+The full sweep data (21 data points × 4 configurations) is in `results/redistribution_sweep*.csv`.
+
+### The momentum exception
+
+Run the same sweep with momentum weights instead of equal weight:
+
+| Redistribution | Sharpe | CAGR | Max Drawdown |
+|---|---|---|---|
+| 0% (cash) | 0.983 | 9.4% | -16.9% |
+| 25% | **0.993** | 10.3% | **-15.4%** |
+| 50% | 0.991 | 11.2% | -16.8% |
+| 75% | 0.982 | 12.1% | -18.8% |
+| 100% (renorm) | 0.966 | 12.9% | -21.7% |
+
+At 25% redistribution, max drawdown *improves* from -16.9% to -15.4% — while CAGR rises from 9.4% to 10.3%. Sharpe peaks at 0.994 around 25–30%. This is not a monotonic dial. There's a genuine sweet spot.
+
+The mechanism: momentum weights (70/20/10) concentrate freed capital in the top-momentum survivor. During the GFC, when SPY collapsed below its 200dma, the highest-momentum survivor was TLT — the flight-to-safety winner. At 25% redistribution, a quarter of SPY's freed weight flows to survivors, heavily concentrated in TLT. The other 75% stays in cash. You get enough TLT exposure to capture its crisis rally while keeping most of the portfolio protected. Equal weight can't do this — it redistributes 50/50 to survivors, with no concentration in the winner.
+
+Why doesn't this show up post-COVID? Because there's no sustained crisis where one asset is clearly the safe haven. Rising rates made TLT the worst performer in 2022, not the best. Momentum still concentrates in the top survivor, but that survivor no longer correlates with drawdown protection. Post-COVID, max drawdown worsens monotonically at every redistribution level — same as equal weight. Sharpe still peaks at ~25% (returns rise faster than volatility in that range), but the drawdown sweet spot is gone.
+
+The takeaway: the ~25% sweet spot is regime-dependent. It works when momentum correctly identifies the safe-haven asset during a crisis — which it did during the GFC but not during the 2022 rate-hiking drawdown. Don't optimize to it.
 
 ### Decision 2: Should you add momentum?
 
@@ -103,6 +123,36 @@ The 200dma filter earns its keep during crises. All four strategies were largely
 During the GFC, the filter had already moved to cash before the crash. During COVID, the strategies were positive while SPY lost 12.5%. During the 2025 tariff shock, momentum was up 7.9% (concentrated in gold) while SPY dropped 7.6%.
 
 The 2022 bear is the hardest test -- stocks, bonds, and gold all declined together, breaking the usual pattern where at least one asset class rallies during a drawdown. Even so, the filter earned its keep: it exited TLT early in 2022 as the bond bear took hold, then exited SPY mid-year. The filtered strategies lost about half what SPY did. The filter worked; it was the cross-asset diversification that temporarily failed.
+
+## What the Numbers Really Mean
+
+The two regimes that truly test this strategy are the GFC and 2022 — the only two sustained multi-asset drawdowns in the 18-year sample. Everything else is either a short crash (COVID — V-shaped recovery too fast for monthly evaluation to matter much) or a calm bull market (2016–2019 — all assets above their 200dma, the filter never fires, every variant behaves identically).
+
+The filter's value is almost entirely determined by how it performs during those two crises. The redistribution dial's behavior is driven by those same two periods. The momentum redistribution sweet spot discussed above? That's driven by just one of them (the GFC).
+
+This is both the strength and the weakness of the backtest. Two genuine out-of-sample crises — the GFC happened after Faber published, and 2022 is a fundamentally different crisis type (rate-driven rather than credit-driven) — and the strategy handled both. But two data points is two data points. The next crisis could look different from both.
+
+The strategy has been tested through two major crises of different types, and it worked in both. But the specific numbers (Sharpe, CAGR, MaxDD) are heavily influenced by those two periods. In a calm market, this strategy is just equal-weight buy-and-hold with a monthly check that never triggers.
+
+## The Calm-Market Cost
+
+Between the GFC and COVID (April 2009 – December 2019), the filter barely fires. All three assets spend most of the decade above their 200dma. The strategy is just equal-weight SPY/TLT/GLD with occasional false exits that create cash drag. Meanwhile:
+
+| Portfolio | CAGR | Max Drawdown | Sharpe |
+|---|---|---|---|
+| SPY buy-and-hold | 16.0% | -19.4% | 1.06 |
+| 60/40 (SPY/AGG) | 11.3% | -11.0% | 1.27 |
+| All-Weather-Lite | 8.7% | -9.1% | 1.26 |
+| **EW-cash (0%)** | **6.7%** | **-8.2%** | **1.00** |
+| EW-renorm (100%) | 9.2% | -22.6% | 0.90 |
+
+The strategy underperforms every benchmark on CAGR. At 0% redistribution, you're earning 6.7% while SPY does 16% and even conservative 60/40 does 11.3%. At 100% redistribution, you close the gap but take on -22.6% drawdown — worse than SPY.
+
+This is the known cost of trend following. The 200dma filter's value comes entirely from drawdown protection during the GFC and 2022. In calm markets, it's a slight drag. The net result over the full period (including both crises) is still favorable on a risk-adjusted basis, but any window that excludes the crises will look bad.
+
+The redistribution dial becomes more interesting in this light. At 0% redistribution you underperform benchmarks but with just -8.2% max drawdown — shallower than even All-Weather-Lite. At 100% you're closer to benchmark returns but with -22.6% max drawdown. The reader can see the tradeoff concretely in a period where the strategy was at a disadvantage.
+
+Whether this tradeoff is worth it depends on whether you think another crisis is coming — and how much of your portfolio you're willing to lose when it does.
 
 ## What Didn't Work
 
