@@ -29,7 +29,7 @@ strategies:
       frequency: monthly     # Evaluate on last trading day of month
     weights:
       type: equal
-    exit_mode: cash           # Filtered assets' weight goes to cash
+    redistribution_pct: 0.0   # 0.0 = full cash exit (Faber's original)
 
   EW-renorm:
     description: "Equal weight, renormalize. Higher growth, deeper drawdowns."
@@ -40,7 +40,7 @@ strategies:
       frequency: monthly
     weights:
       type: equal
-    exit_mode: renormalize    # Filtered assets' weight redistributed to survivors
+    redistribution_pct: 1.0   # 1.0 = full renormalize (100% invested)
 
   # ---------------------------------------------------------
   # Row 2: Momentum-Ranked (70/20/10 among survivors by 12-1)
@@ -58,7 +58,7 @@ strategies:
       lookback_days: 252     # 12 months of trading days
       skip_days: 21          # Exclude most recent month (avoid mean-reversion)
       split: [0.70, 0.20, 0.10]  # Best / middle / worst survivor
-    exit_mode: cash
+    redistribution_pct: 0.0
 
   Momentum-renorm:
     description: "Momentum tilt, renormalize. Maximum growth, largest drawdowns."
@@ -72,7 +72,7 @@ strategies:
       lookback_days: 252
       skip_days: 21
       split: [0.70, 0.20, 0.10]
-    exit_mode: renormalize
+    redistribution_pct: 1.0
 
   # ---------------------------------------------------------
   # Additional filtered strategies
@@ -90,7 +90,7 @@ strategies:
       allocation:
         SPY: 0.60
         AGG: 0.40
-    exit_mode: cash
+    redistribution_pct: 0.0
 
   Faber-5-Asset:
     description: "Faber's original 5-asset universe with 200dma filter, exit to cash."
@@ -101,7 +101,7 @@ strategies:
       frequency: monthly
     weights:
       type: equal
-    exit_mode: cash
+    redistribution_pct: 0.0
 
 # =============================================================
 # Benchmarks — buy-and-hold portfolios for comparison

@@ -174,6 +174,7 @@ def _run_strategy(
     """
     universe = strat_config["universe"]
     exit_mode = strat_config.get("exit_mode", "cash")
+    redistribution_pct = strat_config.get("redistribution_pct")
 
     # Slice prices to universe
     strat_prices = all_prices[universe].dropna()
@@ -199,6 +200,7 @@ def _run_strategy(
         initial_capital=initial_capital,
         slippage_bps=slippage_bps,
         commission_per_trade=commission,
+        redistribution_pct=redistribution_pct,
     )
 
     return equity

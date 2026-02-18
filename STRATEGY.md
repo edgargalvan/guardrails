@@ -29,12 +29,32 @@ The numbers:
 
 | | Cash Exit | Renormalize | Delta |
 |---|---|---|---|
-| CAGR | 7.9% | 11.3% | +3.4% |
-| Max Drawdown | -13.8% | -21.8% | -8.0% |
-| Sharpe | 1.038 | 0.975 | -0.063 |
-| $200K becomes | $821K | $1.47M | +$652K |
+| CAGR | 7.9% | 11.2% | +3.3% |
+| Max Drawdown | -13.8% | -22.6% | -8.8% |
+| Sharpe | 1.038 | 0.962 | -0.076 |
+| $200K becomes | $918K | $1.61M | +$690K |
 
-Renormalize nearly doubles your terminal wealth. But it comes with drawdowns that are 58% deeper. Sharpe drops by ~0.06 — the extra return comes with proportionally more risk. You're dialing the risk/return knob, not getting a free lunch.
+Renormalize nearly doubles your terminal wealth. But it comes with drawdowns that are 64% deeper. Sharpe drops by ~0.08 — the extra return comes with proportionally more risk. You're dialing the risk/return knob, not getting a free lunch.
+
+### The redistribution dial
+
+Faber's paper treats exit-to-cash as a given. But what if you don't exit entirely to cash? What if you redistribute some of the freed capital to the surviving assets?
+
+It turns out this is a continuous parameter — `redistribution_pct` — that goes from 0% (pure cash exit, Faber's version) to 100% (full renormalize). At 50%, half of the freed weight goes back to survivors and half stays in cash. We swept this parameter in 5% increments across the full 2007–2026 period:
+
+| Redistribution | Sharpe | CAGR | Max Drawdown |
+|---|---|---|---|
+| 0% (cash) | 1.038 | 7.9% | -13.8% |
+| 25% | 1.030 | 8.7% | -15.2% |
+| 50% | 1.010 | 9.6% | -17.4% |
+| 75% | 0.987 | 10.4% | -19.6% |
+| 100% (renorm) | 0.962 | 11.2% | -22.6% |
+
+Sharpe stays within a ~0.08 band across the entire range. CAGR climbs monotonically from 7.9% to 11.2%. Max drawdown worsens monotonically from -13.8% to -22.6%. The same pattern holds for the momentum-tilt variant and across every time window we tested.
+
+This means the cash-vs-renormalize choice isn't an optimization — it's a risk appetite dial. You're choosing how much drawdown you can stomach in exchange for higher compounding. There's no free lunch hidden at any point along the curve. Pick the drawdown you can sleep through, set the parameter, and move on.
+
+The full sweep data (21 data points × 3 configurations) is in `results/redistribution_sweep.csv`.
 
 ### Decision 2: Should you add momentum?
 

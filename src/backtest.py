@@ -3,8 +3,11 @@
 Uses vectorbt for portfolio construction (run_backtest) and a custom
 simulation loop for benchmark weight-drift (run_benchmark).
 
-run_backtest: takes weights + prices + exit mode, builds a vectorbt
-Portfolio with target-percent orders, returns an equity curve.
+run_backtest: takes weights + prices + redistribution_pct, builds a vectorbt
+Portfolio with target-percent orders, returns an equity curve. The
+redistribution_pct parameter (0.0–1.0) controls what happens when assets
+are filtered out: 0.0 = all freed weight goes to cash (Faber's original),
+1.0 = all freed weight redistributed to survivors (full renormalize).
 
 run_benchmark: simulates passive buy-and-hold with periodic rebalancing
 and natural weight drift between rebalance dates.
@@ -25,11 +28,12 @@ logger.addHandler(logging.NullHandler())
 def run_backtest(
     prices: pd.DataFrame,
     weights: pd.DataFrame,
-    exit_mode: str,
+    exit_mode: str = None,
     cash_prices: pd.Series = None,
     initial_capital: float = 200_000,
     commission_per_trade: float = 0.0,
     slippage_bps: float = 2.0,
+    redistribution_pct: float = None,
 ) -> pd.Series:
     """Run a single-period backtest via vectorbt.
 
@@ -37,48 +41,75 @@ def run_backtest(
         prices: Daily adjusted close prices, columns = tickers.
         weights: Target weights DataFrame (same shape as prices).
             Weights for "out" assets should already be zero (set by
-            the weighting function). This function handles exit_mode.
-        exit_mode: "cash" or "renormalize".
-            - cash: survivors keep computed weights, remainder is invested
-              in the cash vehicle (e.g. SHY). Total risky exposure drops
-              when assets are filtered out.
-            - renormalize: survivors' weights scaled to sum to 1.0.
-              Stay ~100% invested at all times.
+            the weighting function). This function handles redistribution.
+        exit_mode: DEPRECATED. Use redistribution_pct instead.
+            "cash" maps to redistribution_pct=0.0,
+            "renormalize" maps to redistribution_pct=1.0.
+            Ignored if redistribution_pct is explicitly set.
         cash_prices: Daily prices for cash vehicle (e.g. SHY).
-            Used when exit_mode == "cash". If None, cash earns 0%.
+            If None, uninvested cash earns 0%.
         initial_capital: Starting portfolio value.
         commission_per_trade: Commission as fraction of trade value
             (0.001 = 10bps). Combined with slippage into a single
             per-order fee for vectorbt.
         slippage_bps: Slippage in basis points per side.
+        redistribution_pct: Float 0.0–1.0. When assets are filtered out,
+            this fraction of freed weight is redistributed proportionally
+            to survivors. The remainder goes to cash.
+            0.0 = pure cash exit (Faber's original).
+            1.0 = full renormalize (100% invested at all times).
+            0.5 = half to survivors, half to cash.
 
     Returns:
         Daily equity curve as a Series.
     """
+    # Resolve exit_mode → redistribution_pct (backward compatibility)
+    if redistribution_pct is None:
+        if exit_mode == "renormalize":
+            redistribution_pct = 1.0
+        else:
+            redistribution_pct = 0.0
+
     # Align weights to prices index
     w = weights.reindex(prices.index).ffill().fillna(0.0)
 
-    # Apply exit mode
-    if exit_mode == "renormalize":
-        row_sums = w.sum(axis=1)
-        w = w.div(row_sums.replace(0, np.nan), axis=0).fillna(0.0)
+    # Apply partial redistribution
+    # When assets are filtered out, their weight is zero (set by weight
+    # functions). The "freed" weight is 1.0 - sum(survivor weights).
+    # We redistribute redistribution_pct of that freed weight back to
+    # survivors, proportionally to their current weights.
+    row_sums = w.sum(axis=1)
+    freed = (1.0 - row_sums).clip(lower=0.0)
 
-    # Cash vehicle: add as explicit column so vectorbt invests the
+    if redistribution_pct > 0:
+        # Scale factor: each survivor's weight is multiplied by this.
+        # At pct=1.0: scale = 1/row_sums (full renormalize).
+        # At pct=0.5: scale = 1 + 0.5 * freed/row_sums.
+        scale = 1.0 + (redistribution_pct * freed / row_sums.replace(0, np.nan))
+        w = w.mul(scale.fillna(1.0), axis=0)
+
+    # Cash vehicle: add explicit column so vectorbt invests the
     # uninvested portion in SHY instead of earning 0%.
     p = prices.copy()
-    if exit_mode == "cash":
-        max_weight_sum = w.sum(axis=1).max()
-        if max_weight_sum > 1.0 + 1e-8:
-            logger.warning(
-                "Weights sum > 1.0 on some days (max: %.4f). "
-                "Portfolio is leveraged.", max_weight_sum,
-            )
-        cash_col = (1.0 - w.sum(axis=1)).clip(lower=0.0)
-        if cash_prices is not None:
-            w = w.copy()
-            w["_CASH"] = cash_col
-            p["_CASH"] = cash_prices.reindex(p.index).ffill()
-        # If no cash_prices, uninvested portion earns 0% (vectorbt default)
+    cash_col = (1.0 - w.sum(axis=1)).clip(lower=0.0)
+
+    # Leverage warning
+    max_weight_sum = w.sum(axis=1).max()
+    if max_weight_sum > 1.0 + 1e-8:
+        logger.warning(
+            "Weights sum > 1.0 on some days (max: %.4f). "
+            "Portfolio is leveraged.", max_weight_sum,
+        )
+
+    # Add cash column if any day has meaningful cash allocation.
+    # Even at redistribution_pct=1.0, all-out days (all assets below
+    # 200dma) have cash_col=1.0 and should earn SHY return.
+    has_cash = float(cash_col.max()) > 1e-8
+    if cash_prices is not None and has_cash:
+        w = w.copy()
+        w["_CASH"] = cash_col
+        p["_CASH"] = cash_prices.reindex(p.index).ffill()
+    # If no cash_prices or no cash allocation, uninvested earns 0%
 
     # Align indices
     common_idx = w.index.intersection(p.index)

@@ -249,3 +249,79 @@ def test_invalid_rebalance_raises():
             allocation={"SPY": 0.60, "TLT": 0.40},
             rebalance="quraterly",  # intentional typo
         )
+
+
+# ===================================================================
+# Redistribution parameter tests
+# ===================================================================
+
+def test_partial_redistribution_50pct():
+    """redistribution_pct=0.5 should produce equity between cash and renormalize.
+
+    One asset filtered out in a 3-asset universe. Asset A rises, B and C flat.
+    - pct=0.0 (cash): A at 1/3, 2/3 in cash → gains = 1/3 of A's return
+    - pct=1.0 (renorm): A at 1.0 → gains = 100% of A's return
+    - pct=0.5: A at 2/3, 1/3 in cash → gains between the two
+    """
+    dates = pd.bdate_range("2020-01-01", periods=10)
+    prices = pd.DataFrame({
+        "A": [100 + i * 2 for i in range(10)],
+        "B": [100.0] * 10,
+        "C": [100.0] * 10,
+    }, index=dates)
+    # Only A is "in", B and C filtered out
+    w = pd.DataFrame({
+        "A": [1.0 / 3] * 10,
+        "B": [0.0] * 10,
+        "C": [0.0] * 10,
+    }, index=dates)
+
+    eq_cash = backtest.run_backtest(
+        prices, w, redistribution_pct=0.0,
+        initial_capital=100.0, slippage_bps=0.0)
+    eq_half = backtest.run_backtest(
+        prices, w, redistribution_pct=0.5,
+        initial_capital=100.0, slippage_bps=0.0)
+    eq_renorm = backtest.run_backtest(
+        prices, w, redistribution_pct=1.0,
+        initial_capital=100.0, slippage_bps=0.0)
+
+    # 50% should be strictly between cash and renormalize
+    assert eq_cash.iloc[-1] < eq_half.iloc[-1] < eq_renorm.iloc[-1], \
+        (f"Expected cash ({eq_cash.iloc[-1]:.4f}) < half ({eq_half.iloc[-1]:.4f}) "
+         f"< renorm ({eq_renorm.iloc[-1]:.4f})")
+
+
+def test_exit_mode_backward_compat():
+    """exit_mode='cash' and 'renormalize' still work as before."""
+    dates = pd.bdate_range("2020-01-01", periods=10)
+    prices = pd.DataFrame({
+        "A": [100 + i * 2 for i in range(10)],
+        "B": [100.0] * 10,
+        "C": [100.0] * 10,
+    }, index=dates)
+    w = pd.DataFrame({
+        "A": [1.0 / 3] * 10,
+        "B": [0.0] * 10,
+        "C": [0.0] * 10,
+    }, index=dates)
+
+    eq_old_cash = backtest.run_backtest(
+        prices, w, exit_mode="cash",
+        initial_capital=100.0, slippage_bps=0.0)
+    eq_new_cash = backtest.run_backtest(
+        prices, w, redistribution_pct=0.0,
+        initial_capital=100.0, slippage_bps=0.0)
+
+    eq_old_renorm = backtest.run_backtest(
+        prices, w, exit_mode="renormalize",
+        initial_capital=100.0, slippage_bps=0.0)
+    eq_new_renorm = backtest.run_backtest(
+        prices, w, redistribution_pct=1.0,
+        initial_capital=100.0, slippage_bps=0.0)
+
+    # Old and new should produce identical results
+    assert abs(eq_old_cash.iloc[-1] - eq_new_cash.iloc[-1]) < 1e-10, \
+        "exit_mode='cash' should match redistribution_pct=0.0"
+    assert abs(eq_old_renorm.iloc[-1] - eq_new_renorm.iloc[-1]) < 1e-10, \
+        "exit_mode='renormalize' should match redistribution_pct=1.0"
